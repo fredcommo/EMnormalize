@@ -1,4 +1,5 @@
 ####################################
+```r
 # Example
 op <- par(no.readonly=TRUE)
 set.seed(112335)
@@ -25,3 +26,4 @@ xnorm <- EMnormalize(x, xlim=range(0, 6), ylim=range(0, .6), main="Resampling me
 # True groups
 plotEMmodel(x, 1:4, rep(0.5, 4), p.init, which.max(p.init), xlim=range(0, 6), ylim=range(0, .6), main="True distribution")
 par(op)
+```
