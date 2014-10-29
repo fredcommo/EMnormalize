@@ -22,7 +22,7 @@ p <- model$parameters$pro
 D <- computeDensities(length(x), m, s, p)
 bestPeak <- chooseBestPeak(D$peaks, m, peakThresh=.95)
 
-par(mfrow=c(3, 1))
+par(mfrow=c(3, 1), cex.main=2)
 plotEMmodel(x, m, s, p, bestPeak, xlim=range(0, 6), main="Original Mclust")
 
 # Resampling method
