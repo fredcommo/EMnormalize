@@ -26,22 +26,22 @@ buildEMmodel <- function(x, G, useN){
   k <- as.factor(model$classification)
   p <- model$parameters$pro
   m <- model$parameters$mean
-  s <- model$parameters$variance$sigmasq
-  if(length(s)<length(m)) s <- rep(s, length(m))
+  s2 <- model$parameters$variance$sigmasq
+  if(length(s2)<length(m)) s2 <- rep(s2, length(m))
   levels(k) <- order(m)
   p <- p[order(m)]
-  s <- s[order(m)]
+  s2 <- s2[order(m)]
   m <- m[order(m)]
-  return(list(nG = nG, m = m, p = p, s =s, idx=idx, k=as.numeric(as.vector(k))))
+  return(list(nG = nG, m = m, p = p, s2 = s2, idx=idx, k=as.numeric(as.vector(k))))
 }
-computeDensities <- function(n, m, s, p){
+computeDensities <- function(n, m, s2, p){
   '
 	Called in EMnormalize(object)
 	Simulates the mixture model according to the returned EM paramaters.
 	'
-  if(length(s)<length(m)) s <- rep(s, length(m))
+  if(length(s2)<length(m)) s2 <- rep(s2, length(m))
   D <- lapply(1:length(m), function(ii){
-    tmp <- rnorm(n, m[ii], sqrt(s[ii]))
+    tmp <- rnorm(n, m[ii], sqrt(s2[ii]))
     tmpD <- density(tmp, na.rm = T)
     tmpD$y = tmpD$y *p[ii]
     return(tmpD)
@@ -65,16 +65,16 @@ chooseBestPeak <- function(peaks, m, peakThresh){
   cat('Peak at', m[bestPeak], 'has been chosen.\n')
   return(bestPeak)
 }
-plotEMmodel <- function(x, m, s, p, bestPeak, ...){
+plotEMmodel <- function(x, m, s2, p, bestPeak, ...){
   
   '
 	Visualization of the mixture model
 	Called in EMnormalize(object)
 	'
   
-  if(length(s)<length(m)) s <- rep(s, length(m))
+  if(length(s2)<length(m)) s2 <- rep(s2, length(m))
   dx <- density(x, na.rm=TRUE)
-  bw <- dx$bw
+  bw <- dx$bw/10
   h <- hist(x, nclass=floor(length(x)*bw), freq=FALSE, border="lightblue",...)
   lines(dx, lty=2)
   polygon(dx$x, dx$y, col=rgb(.5, .5, .5, .05), border=NA)
@@ -83,8 +83,8 @@ plotEMmodel <- function(x, m, s, p, bestPeak, ...){
   maxy <- max(dx$y)*1.25
 
   lapply(1:N, function(ii){
-    x <- sort(rnorm(1e4, m[ii], sqrt(s[ii])))
-    d <- dnorm(x, m[ii], sqrt(s[ii]))
+    x <- sort(rnorm(1e4, m[ii], sqrt(s2[ii])))
+    d <- dnorm(x, m[ii], sqrt(s2[ii]))
     d <- d*p[ii]
     lines(x, d, col = rgb(ii/N, 0.2, (N-ii)/N, 0.75))
     alpha=.1; font=1; Cex=1
@@ -92,7 +92,10 @@ plotEMmodel <- function(x, m, s, p, bestPeak, ...){
       alpha=.5; font=2; Cex=1.25
     } 
     polygon(x, d, col = rgb(ii/N, 0.2, (N-ii)/N, alpha))
-    text(m[ii], maxy*p[ii], round(m[ii], 3), font=font, cex=Cex)
+    yrange <- par("yaxp")[1:2]
+    text(m[ii], max(d)+yrange[2]*.1, round(m[ii], 3), font=font, cex=Cex)
+    
+#    text(m[ii], maxy*p[ii], round(m[ii], 3), font=font, cex=Cex)
     #    text(m[ii], min(maxy, max(d)*1.35), round(m[ii], 3), font=font, cex=Cex)
   })
 }
@@ -101,20 +104,24 @@ plotEMmodel <- function(x, m, s, p, bestPeak, ...){
 ##############################
 ##############################
 # Main function
-EMnormalize <- function(x, cut=c(.05, .95), G=3:6, B=100, peakThresh=0.95, Ksmooth=11, useN=1e3, Plot=TRUE, ...){
+EMnormalize <- function(x, cut=c(0, 1), G=3:6, B=100, peakThresh=0.95, Ksmooth=11, useN=1e3, Plot=TRUE, ...){
+
   cuts <- as.numeric(quantile(x, c(cut[1], cut[2]), na.rm=TRUE))
+
   if(Ksmooth>0)
-    x <- .smooth(x, cuts, K=Ksmooth)
+    xprim <- .smooth(x, cuts, K=Ksmooth)
+  else
+    xprim <- x
   
-  if(useN>length(x)) useN <- floor(length(x)*.3)
+  if(useN>length(xprim)) useN <- floor(length(xprim)*.3)
   
   cat("Searching for parameters...\n")
-  EMmodels <- lapply(1:B, function(b){cat(b, "\t"); buildEMmodel(x, G, useN)})										# helper function
+  EMmodels <- lapply(1:B, function(b){cat(b, "\t"); buildEMmodel(xprim, G, useN)})										# helper function
   nG <- do.call(c, lapply(EMmodels, function(m) m$nG))
   models <- EMmodels[nG==median(nG)]
   m <- do.call(rbind, lapply(models, function(m) m$m))
   p <- do.call(rbind, lapply(models, function(m) m$p))
-  s <- do.call(rbind, lapply(models, function(m) m$s))
+  s2 <- do.call(rbind, lapply(models, function(m) m$s2))
   idx <- do.call(c, lapply(models, function(m) m$idx))
   k <- do.call(c, lapply(models, function(m) m$k))
   tk <- table(idx, k)
@@ -122,12 +129,14 @@ EMnormalize <- function(x, cut=c(.05, .95), G=3:6, B=100, peakThresh=0.95, Ksmoo
   cat('\nDone.\n')
   
   m <- apply(m, 2, median, na.rm=TRUE)
-  s <- apply(s, 2, median, na.rm=TRUE)
+  s2 <- apply(s2, 2, median, na.rm=TRUE)
+  if(Ksmooth>0)
+    s2 <- s2*Ksmooth
   p <- apply(p, 2, median, na.rm=TRUE)
   
   # compute densities
   cat('Computing densities...')
-  computeD <- computeDensities(length(x), m, s, p)								# helper function
+  computeD <- computeDensities(length(xprim), m, s2, p)								# helper function
   bestPeak <- Inf
   correct <- 0
   if(!is.na(peakThresh)){
@@ -141,9 +150,9 @@ EMnormalize <- function(x, cut=c(.05, .95), G=3:6, B=100, peakThresh=0.95, Ksmoo
   cat("\n\nEM correction factor = ", correct, "\n\n")
 
   if(Plot){
-    plotEMmodel(x, m, s, p, bestPeak, ...)
+    plotEMmodel(x, m, s2, p, bestPeak)#, ...)
   }
-return(list(original=x, corrected=x-correct, means=m, sd=s, props=p, correction=correct, k=as.numeric(k)))
+return(list(original=x, corrected=x-correct, means=m, sq=s2, props=p, correction=correct, k=as.numeric(k)))
 }
 
 
