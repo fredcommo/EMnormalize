@@ -150,7 +150,7 @@ EMnormalize <- function(x, cut=c(0, 1), G=3:6, B=100, peakThresh=0.95, Ksmooth=1
   cat("\n\nEM correction factor = ", correct, "\n\n")
 
   if(Plot){
-    plotEMmodel(x, m, s2, p, bestPeak)#, ...)
+    plotEMmodel(x, m, s2, p, bestPeak, ...)
   }
 return(list(original=x, corrected=x-correct, means=m, sq=s2, props=p, correction=correct, k=as.numeric(k)))
 }
